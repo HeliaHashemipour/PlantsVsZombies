@@ -5,13 +5,19 @@ import Miscs.Socket.Client;
 import java.awt.*;
 import java.util.ArrayList;
 
-import static Main.Main.isServerUp;
+import static Main.Main.*;
 
+/**
+ * Scoreboard class performed the scoreboard of the game.
+ * @author Hashemipor
+ * @since 2021
+ */
 
 public class Scoreboard {
 
     /**
-     * return the saved data on the server
+     * The constructor of Scoreboard class returns
+     * the saved data on the server
      */
     public Scoreboard() {
         Client score = new Client("Scoreboard");
@@ -19,9 +25,9 @@ public class Scoreboard {
     }
 
     /**
-     * waits for a call, then returns the requested data
+     * communicate method waits for a call, then returns the requested data from
+     * Ranking & Accounts & Main.
      */
-
     private void communicate(Client score) {
         ArrayList<Player> players = Player.load();
         String[] receive = score.receive();
@@ -59,11 +65,15 @@ public class Scoreboard {
                     score.send("Scoreboard");
                     score.send("Main");
                     ArrayList<GameSave> playerSaves = GameSave.load(receive[1]);
-                    if (playerSaves != null) {
-                        score.send(String.valueOf(playerSaves.size() *
-                                (playerSaves.get(0).cards.size() +
-                                        (playerSaves.get(0).objects.size() * 4) +
-                                        5)));
+                    if (playerSaves != null && !playerSaves.isEmpty()) {
+                        int saveCount = 0;
+                        int cardsCount = 0, objectsCount = 0;
+                        for (GameSave save : playerSaves) {
+                            cardsCount += save.cards.size();
+                            objectsCount += save.objects.size() * 4;
+                        }
+                        saveCount += (playerSaves.size() * 4 + (cardsCount + objectsCount)) + 1;
+                        score.send(String.valueOf(saveCount));
                         score.send(String.valueOf(playerSaves.size()));
                         for (GameSave save : playerSaves) {
                             score.send(String.valueOf(save.cards.size()));
@@ -94,12 +104,14 @@ public class Scoreboard {
                         savePlayers.add(new Player(difficulty, wins, losses, scores, name));
                     }
                     Player.save(savePlayers);
-                    ArrayList<Integer> cards = new ArrayList<>();
-                    ArrayList<GameObjects> objects = new ArrayList<>();
                     ArrayList<GameSave> saves = new ArrayList<>();
                     int gamesCount = Integer.parseInt(receive[i++]);
-                    for (int j = 0;j < gamesCount; j++) {
+                    System.out.println(gamesCount);
+                    for (int j = 0; j < gamesCount; j++) {
+                        ArrayList<Integer> cards = new ArrayList<>();
+                        ArrayList<GameObjects> objects = new ArrayList<>();
                         int cardsCount = Integer.parseInt(receive[i++]);
+                        System.out.println(cardsCount);
                         for (int k = 0; k < cardsCount; k++) {
                             cards.add(Integer.valueOf(receive[i++]));
                         }
@@ -114,7 +126,7 @@ public class Scoreboard {
                         saves.add(new GameSave(objects, Integer.parseInt(receive[i++]), cards,
                                 Integer.parseInt(receive[i++])));
                     }
-                    GameSave.save(saves, receive[receive.length - 1]);
+                    GameSave.save(saves, receive[i]);
                 }
             }
         }

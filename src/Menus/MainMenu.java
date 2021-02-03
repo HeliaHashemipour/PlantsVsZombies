@@ -1,16 +1,16 @@
 package Menus;
 
-import Main.Main;
-import Miscs.Icons;
-import Miscs.Player;
-import Miscs.Sounds;
+import Miscs.*;
+import Miscs.Socket.Client;
 
 import javax.swing.*;
 
+import java.awt.*;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
+import java.util.ArrayList;
 
-import static Main.Main.TESTING;
+import static Main.Main.*;
 import static Miscs.Sounds.*;
 
 /**
@@ -26,8 +26,11 @@ import static Miscs.Sounds.*;
 public class MainMenu extends JFrame {
     public Player player;
     JLabel back, newButton, loadButton, settingsButton, rankingButton;
+    Client main;
     public MainMenu(Player player) {
         this.player = player;
+        main = new Client("Main");
+        if (saves.isEmpty()) communicate(main);
 
         background();
 
@@ -42,11 +45,97 @@ public class MainMenu extends JFrame {
         Sounds.backPlay(MAIN_MENU);
         setVisible(true);
 
-        Runtime.getRuntime().addShutdownHook(new Thread( () -> {
-            Player.save(Main.loadedPlayers);
-            if (TESTING) System.out.println("Saving Files Before Exit");
-        }));
+        if (!addedShotDownHook) {
+            Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+                main.send("Main");
+                main.send("Scoreboard");
+                if (loadedPlayers != null) {
+                    int saveCount = loadedPlayers.size() * 5 + 3;
+                    if (!saves.isEmpty()) {
+                        int cardsCount = 0, objectsCount = 0;
+                        for (GameSave save: saves) {
+                            cardsCount += save.cards.size();
+                            objectsCount += save.objects.size() * 4;
+                        }
+                        saveCount += (saves.size() * 4 + (cardsCount + objectsCount));
+                    }
+                    main.send(String.valueOf(saveCount));
+                    main.send(String.valueOf(loadedPlayers.size()));
+                    for (Player value : loadedPlayers) {
+                        main.send(value.username);
+                        main.send(String.valueOf(value.score));
+                        main.send(String.valueOf(value.wins));
+                        main.send(String.valueOf(value.losses));
+                        main.send(String.valueOf(value.difficulty));
+                    }
+                }
+                if (!saves.isEmpty()) {
+                    main.send(String.valueOf(saves.size()));
+                    for (GameSave save : saves) {
+                        main.send(String.valueOf(save.cards.size()));
+                        for (Integer card : save.cards) {
+                            main.send(String.valueOf(card));
+                        }
+                        main.send(String.valueOf(save.objects.size()));
+                        for (GameObjects object : save.objects) {
+                            main.send(object.objectName);
+                            main.send(String.valueOf(object.health));
+                            main.send(String.valueOf(object.position.x));
+                            main.send(String.valueOf(object.position.y));
+                        }
+                        main.send(String.valueOf(save.gameTime));
+                        main.send(String.valueOf(save.suns));
+                    }
+                } else main.send("0");
+                main.send(player.username);
+                if (TESTING) System.out.println("Saving Files Before Exit");
+                try {
+                    Thread.sleep(2000);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }));
+            addedShotDownHook = true;
+        }
     }
+
+
+    /**
+     * Communicates with the server
+     * @param main the client of the main menu.
+     */
+    private void communicate(Client main) {
+        main.send("Main");
+        main.send("Scoreboard");
+        main.send("1");
+        main.send(player.username);
+        String[] received = main.receive();
+        if (received[0].equals("Scoreboard") && received.length > 1) {
+            int i = 1, j = 0;
+            int gamesCount = Integer.parseInt(received[i++]);
+            for (;j < gamesCount; j++) {
+                ArrayList<Integer> cards = new ArrayList<>();
+                ArrayList<GameObjects> objects = new ArrayList<>();
+                int cardsCount = Integer.parseInt(received[i++]);
+                for (int k = 0; k < cardsCount; k++) {
+                    cards.add(Integer.valueOf(received[i++]));
+                }
+                int objectsCount = Integer.parseInt(received[i++]);
+                for (int x = 0; x < objectsCount; x++) {
+                    String name = received[i++];
+                    int health = Integer.parseInt(received[i++]);
+                    Point point = new Point(Integer.parseInt(received[i++]), Integer.parseInt(received[i++]));
+                    GameObjects temp = new GameObjects(name, point, health);
+                    objects.add(temp);
+                }
+                saves.add(new GameSave(objects, Integer.parseInt(received[i++]), cards,
+                        Integer.parseInt(received[i++])));
+            }
+        }
+    }
+    /**
+     * sets the main background
+     */
     private void background() {
         back = new JLabel();
         back.setIcon(Icons.firstIcon);
@@ -73,6 +162,7 @@ public class MainMenu extends JFrame {
                 mute();
                 new Thread(() -> new Game(player, muted)).start();
                 dispose();
+                //main.close();
             }
             @Override
             public void mouseReleased(MouseEvent e) {
@@ -84,7 +174,7 @@ public class MainMenu extends JFrame {
             public void mouseExited(MouseEvent e) {}
         });
         loadButton = new JLabel();
-        boolean loaded = Player.load() != null;
+        boolean loaded = !saves.isEmpty();
         if (loaded)
             loadButton.setIcon(Icons.buttonIcon);
         else
@@ -111,15 +201,10 @@ public class MainMenu extends JFrame {
             }
             @Override
             public void mouseReleased(MouseEvent e) {
-                if(loaded) loadButton.setIcon(Icons.buttonIcon);
-                mute();
-                try {
-                    Thread.sleep(1000);
-                } catch (InterruptedException interruptedException) {
-                    interruptedException.printStackTrace();
+                if(loaded) {
+                    loadButton.setIcon(Icons.buttonIcon);
+                    new Thread(()->new SavingMenu(MainMenu.this)).start();
                 }
-                new Thread(() -> new Game(player, muted)).start();
-                dispose();
             }
             @Override
             public void mouseEntered(MouseEvent e) {}
